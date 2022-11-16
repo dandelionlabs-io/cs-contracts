@@ -18,15 +18,10 @@ interface PriceFeed {
     returns (uint80 roundId, int256 answer, uint startedAt, uint updatedAt, uint80 answeredInRound);
 }
 
-library Sale {
-    enum Status {
-        NOT_STARTED, // 0
-        STARTED,     // 1
-        PAUSED,      // 2
-        ENDED        // 3
-    }
+contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpgradeable, PaymentSplitterUpgradeable {
 
-    struct Information {
+    struct SaleInformation {
+        bool saleEnabled;             // if sale is active
         uint ethBalance;              // balance in eth
         uint USDTBalance;             // balance in usdt
         uint USDTAllowance;           // allowance in usdt for the contract
@@ -35,28 +30,28 @@ library Sale {
         uint latestPriceInEth;        // price of NFT in eth
         uint latestPriceInUSDT;       // price of NFT in usdt
     }
-}
 
-contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpgradeable, PaymentSplitterUpgradeable {
-
-    // USDT address
+    // @dev USDT address
     IERC20 public usdt;
 
-    // USDT against ETH price feed
+    // @dev USDT against ETH price feed
     PriceFeed public priceFeed;
 
-    string private _baseTokenURI;
+    // @dev mapping for token URIs
+    mapping(uint => string) private tokenURIs;
 
-    // MAX per buying event
+    // @dev MAX per buying event
     uint public MAX_SALE = 300;   
 
+    // @dev defines sale price in USDT (6 decimals)
     uint public salePrice;
 
-    Sale.Status public saleStatus;
+    // @dev if sale is active enables minting function
+    bool public saleEnabled;
 
     function __CryptoSurfersNFT_initialize(
         address _owner,
-        string memory baseURI_,
+        uint _salePrice,
         address _usdtAddress,
         address _priceFeedAddress,
         address[] memory payees,
@@ -68,15 +63,13 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         __PaymentSplitter_init(payees, shares_);
         transferOwnership(_owner);
 
+        salePrice = _salePrice;
         usdt = IERC20(_usdtAddress);
         priceFeed = PriceFeed(_priceFeedAddress);
-        salePrice = 0.1 ether;
-        _baseTokenURI = baseURI_;
-        saleStatus = Sale.Status.NOT_STARTED;
     }
 
     function mint(uint _quantity, bool payWithEther) external payable  {
-        require(saleStatus == Sale.Status.STARTED, "CryptoSurfersNFT::mint: Sale hasn't started.");
+        require(saleEnabled && !paused(), "CryptoSurfersNFT::mint: Sale is not active.");
         require(_quantity > 0, "CryptoSurfersNFT::mint: Quantity cannot be zero.");
         require(_quantity <= MAX_SALE, "CryptoSurfersNFT::mint: Quantity cannot be bigger than MAX_BUYING.");
 
@@ -113,14 +106,6 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         return (salePrice * 1e20) / uint(price);
     }
 
-    function _baseURI() internal view virtual override returns (string memory) {
-        return _baseTokenURI;
-    }
-
-    function setBaseURI(string calldata baseURI) external onlyOwner {
-        _baseTokenURI = baseURI;
-    }
-
     function setSalePrice(uint _newPrice) external onlyOwner {
         salePrice = _newPrice;
     }
@@ -129,19 +114,14 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         MAX_SALE = _saleMax;
     }
 
-    function startSale() external onlyOwner {
-        require(saleStatus == Sale.Status.NOT_STARTED || saleStatus == Sale.Status.PAUSED, "CrowdsaleStatus::startSale: Inconsistent status.");
-        saleStatus = Sale.Status.STARTED;
+    function enableSale() external onlyOwner {
+        require(!saleEnabled, "CrowdsaleStatus::startSale: Inconsistent status.");
+        saleEnabled = true;
     }
 
-    function pauseSale() external onlyOwner {
-        require(saleStatus == Sale.Status.STARTED, "CrowdsaleStatus::pauseSale: Sale is not active.");
-        saleStatus = Sale.Status.PAUSED;
-    }
-
-    function endSale() external onlyOwner {
-        require(saleStatus == Sale.Status.STARTED || saleStatus == Sale.Status.PAUSED, "CrowdsaleStatus::endSale: Sale is not started.");
-        saleStatus = Sale.Status.ENDED;
+    function disableSale() external onlyOwner {
+        require(saleEnabled, "CrowdsaleStatus::pauseSale: Sale is not active.");
+        saleEnabled = false;
     }
 
     function pause() external onlyOwner {
@@ -152,8 +132,9 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         _unpause();
     }
 
-    function getSaleInformation(address _userAddress) external view returns (Sale.Information memory) {
-        return Sale.Information({
+    function getSaleInformation(address _userAddress) external view returns (SaleInformation memory) {
+        return SaleInformation({
+            saleEnabled: saleEnabled && !paused(),
             ethBalance: _userAddress.balance,
             USDTBalance: usdt.balanceOf(_userAddress),
             USDTAllowance: usdt.allowance(_userAddress, address(this)),
@@ -162,6 +143,23 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
             latestPriceInEth: getLatestPriceInEth(),
             latestPriceInUSDT: salePrice
         });
+    }
+
+    function tokenURI(uint tokenId) public view virtual override returns (string memory) {
+        require(_exists(tokenId), "CryptoSurfersNFT: NFT has not been minted");
+        return tokenURIs[tokenId];
+    }
+
+    /**
+     * @dev Sets `_tokenURI` as the tokenURI of `tokenId`.
+     *
+     * Requirements:
+     *
+     * - `tokenId` must exist.
+     */
+    function _setTokenURI(uint tokenId, string memory _tokenURI) internal virtual {
+        require(_exists(tokenId), "CryptoSurfersNFT: URI set of nonexistent token");
+        tokenURIs[tokenId] = _tokenURI;
     }
 
     /**
