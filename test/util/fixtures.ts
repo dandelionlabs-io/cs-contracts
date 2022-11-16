@@ -22,7 +22,7 @@ async function deployCollection() {
     CryptoSurfersNFT, 
     [
       owner.address,         // owner
-      "1000000000000000000", // sale price (0.1 ETH)
+      "1000000", // sale price (1 USDT)
       300,
       usdt.address,
       priceFeed.address,
@@ -34,7 +34,7 @@ async function deployCollection() {
 
   await collection.deployed()
 
-  return { collection, owner, user };
+  return { collection, owner, user, usdt };
 }
 
 export { deployCollection };
