@@ -21,13 +21,13 @@ async function main() {
   const collection = await upgrades.deployProxy(
     CryptoSurfersNFT, 
     [
-      owner.address,         // owner
+      process.env.DEPLOYER_ADDRESS,         // owner
       "1000000", // sale price (1 USDT)
       300,
       usdt.address,
       priceFeed.address,
-      [owner.address, user.address],
-      [5000, 5000]
+      [process.env.DEPLOYER_ADDRESS],
+      [5000]
     ], 
     { initializer: '__CryptoSurfersNFT_initialize' }
   );
