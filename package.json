@@ -12,7 +12,9 @@
     "typescript": "^4.9.3"
   },
   "scripts": {
-    "test": "npx hardhat test"
+    "test": "npx hardhat test",
+    "deploy": "npx hardhat run scripts/deploy.ts",
+    "deploy:goerli": "npx hardhat run scripts/deploy.ts --network goerli"
   },
   "repository": {
     "type": "git",
