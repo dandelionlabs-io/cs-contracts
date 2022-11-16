@@ -2,16 +2,20 @@
 
 pragma solidity ^0.8.4;
 
-import "erc721a-upgradeable/contracts/ERC721AUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/finance/PaymentSplitterUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "erc721a-upgradeable/contracts/ERC721AUpgradeable.sol";
 
 interface IERC20 {
-    function balanceOf(address account) external view returns (uint256);
-    function allowance(address owner, address spender) external view returns (uint256);
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint);
+    function allowance(address owner, address spender) external view returns (uint);
+    function transferFrom(address sender, address recipient, uint amount) external returns (bool);
+}
+
+interface PriceFeed {
+    function latestRoundData() external view
+    returns (uint80 roundId, int256 answer, uint startedAt, uint updatedAt, uint80 answeredInRound);
 }
 
 library Sale {
@@ -23,13 +27,13 @@ library Sale {
     }
 
     struct Information {
-        uint256 ethBalance;              // balance in eth
-        uint256 USDTBalance;            // balance in erc20
-        uint256 USDTAllowance;          // allowance in erc20 for the contract
-        uint256 userMinted;              // minted by the user
-        uint256 totalMintedInCollection; // total minted in the collection
-        uint256 latestPriceInEth;      // price of NFT in eth
-        uint256 latestPriceInUSDT;      // price of NFT in erc20
+        uint ethBalance;              // balance in eth
+        uint USDTBalance;             // balance in usdt
+        uint USDTAllowance;           // allowance in usdt for the contract
+        uint userMinted;              // minted by the user
+        uint totalMintedInCollection; // total minted in the collection
+        uint latestPriceInEth;        // price of NFT in eth
+        uint latestPriceInUSDT;       // price of NFT in usdt
     }
 }
 
@@ -39,7 +43,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
     IERC20 public usdt;
 
     // USDT against ETH price feed
-    AggregatorV3Interface public priceFeed;
+    PriceFeed public priceFeed;
 
     string private _baseTokenURI;
 
@@ -56,16 +60,16 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         address _usdtAddress,
         address _priceFeedAddress,
         address[] memory payees,
-        uint256[] memory shares_
+        uint[] memory shares_
     ) initializer public {
         __Ownable_init();
         __Pausable_init();
         __ERC721A_init("CryptoSurfersNFT", "SURF");
-        __PaymentSplitter_init_unchained(payees, shares_);
+        __PaymentSplitter_init(payees, shares_);
         transferOwnership(_owner);
 
         usdt = IERC20(_usdtAddress);
-        priceFeed = AggregatorV3Interface(_priceFeedAddress);
+        priceFeed = PriceFeed(_priceFeedAddress);
         salePrice = 0.1 ether;
         _baseTokenURI = baseURI_;
         saleStatus = Sale.Status.NOT_STARTED;
@@ -90,16 +94,16 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         _safeMint(msg.sender, _quantity);
     }
 
-    function mintByOwner(address _to, uint256 _quantity) public onlyOwner {
+    function mintByOwner(address _to, uint _quantity) public onlyOwner {
         require(_quantity > 0, "CryptoSurfersNFT::mintByOwner: Quantity cannot be zero.");
         
         _safeMint(_to, _quantity);
     }
     
-    function batchMintByOwner(address[] memory _mintAddressList, uint256[] memory _quantityList) external onlyOwner {
+    function batchMintByOwner(address[] memory _mintAddressList, uint[] memory _quantityList) external onlyOwner {
         require (_mintAddressList.length == _quantityList.length, "CryptoSurfersNFT::batchMintByOwner: The length should be same");
 
-        for (uint256 i = 0; i < _mintAddressList.length; i += 1) {
+        for (uint i = 0; i < _mintAddressList.length; i += 1) {
             mintByOwner(_mintAddressList[i], _quantityList[i]);
         }
     }
@@ -170,12 +174,12 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
     function _beforeTokenTransfers(
         address from,
         address to,
-        uint256 startTokenId,
-        uint256 quantity
+        uint startTokenId,
+        uint quantity
     ) internal virtual override {
         super._beforeTokenTransfers(from, to, startTokenId, quantity);
         require(!paused(), "CryptoSurfersNFT::_beforeTokenTransfers: token transfer while paused.");
     }
 
-    uint256[50] private __gap;
+    uint[50] private __gap;
 }
