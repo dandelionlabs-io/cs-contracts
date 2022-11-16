@@ -27,6 +27,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         uint USDTAllowance;           // allowance in usdt for the contract
         uint userMinted;              // minted by the user
         uint totalMintedInCollection; // total minted in the collection
+        uint maxPerSale;              // max items to buy per tx
         uint latestPriceInEth;        // price of NFT in eth
         uint latestPriceInUSDT;       // price of NFT in usdt
     }
@@ -41,7 +42,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
     mapping(uint => string) private tokenURIs;
 
     // @dev MAX per buying event
-    uint public MAX_SALE = 300;   
+    uint public maxPerSale;
 
     // @dev defines sale price in USDT (6 decimals)
     uint public salePrice;
@@ -52,11 +53,12 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
     function __CryptoSurfersNFT_initialize(
         address _owner,
         uint _salePrice,
+        uint _maxPerSale,
         address _usdtAddress,
         address _priceFeedAddress,
         address[] memory payees,
         uint[] memory shares_
-    ) initializer public {
+    ) initializerERC721A initializer public {
         __Ownable_init();
         __Pausable_init();
         __ERC721A_init("CryptoSurfersNFT", "SURF");
@@ -64,6 +66,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         transferOwnership(_owner);
 
         salePrice = _salePrice;
+        maxPerSale = _maxPerSale;
         usdt = IERC20(_usdtAddress);
         priceFeed = PriceFeed(_priceFeedAddress);
     }
@@ -71,7 +74,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
     function mint(uint _quantity, bool payWithEther) external payable  {
         require(saleEnabled && !paused(), "CryptoSurfersNFT::mint: Sale is not active.");
         require(_quantity > 0, "CryptoSurfersNFT::mint: Quantity cannot be zero.");
-        require(_quantity <= MAX_SALE, "CryptoSurfersNFT::mint: Quantity cannot be bigger than MAX_BUYING.");
+        require(_quantity <= maxPerSale, "CryptoSurfersNFT::mint: Quantity cannot be bigger than MAX_BUYING.");
 
         if (payWithEther) {
             uint ethPrice = getLatestPriceInEth() * _quantity;
@@ -110,8 +113,8 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         salePrice = _newPrice;
     }
 
-    function setSaleMax(uint _saleMax) external onlyOwner {
-        MAX_SALE = _saleMax;
+    function setSaleMax(uint _maxPerSale) external onlyOwner {
+        maxPerSale = _maxPerSale;
     }
 
     function enableSale() external onlyOwner {
@@ -140,6 +143,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
             USDTAllowance: usdt.allowance(_userAddress, address(this)),
             userMinted: balanceOf(_userAddress),
             totalMintedInCollection: totalSupply(),
+            maxPerSale: maxPerSale,
             latestPriceInEth: getLatestPriceInEth(),
             latestPriceInUSDT: salePrice
         });
