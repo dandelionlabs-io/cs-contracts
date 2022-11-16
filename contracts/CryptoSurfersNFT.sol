@@ -24,19 +24,19 @@ library Sale {
 
     struct Information {
         uint256 ethBalance;              // balance in eth
-        uint256 erc20Balance;            // balance in erc20
-        uint256 erc20Allowance;          // allowance in erc20 for the contract
+        uint256 USDTBalance;            // balance in erc20
+        uint256 USDTAllowance;          // allowance in erc20 for the contract
         uint256 userMinted;              // minted by the user
         uint256 totalMintedInCollection; // total minted in the collection
-        uint256 latestPriceInMatic;      // price of NFT in eth
-        uint256 latestPriceInErc20;      // price of NFT in erc20
+        uint256 latestPriceInEth;      // price of NFT in eth
+        uint256 latestPriceInUSDT;      // price of NFT in erc20
     }
 }
 
 contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpgradeable, PaymentSplitterUpgradeable {
 
     // USDT address
-    IERC20 public erc20;
+    IERC20 public usdt;
 
     // USDT against ETH price feed
     AggregatorV3Interface public priceFeed;
@@ -48,31 +48,31 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
 
     uint public salePrice;
 
-    SaleStatus public saleStatus;
+    Sale.Status public saleStatus;
 
     function __CryptoSurfersNFT_initialize(
         address _owner,
         string memory baseURI_,
-        address _eRC20address,
+        address _usdtAddress,
         address _priceFeedAddress,
         address[] memory payees,
         uint256[] memory shares_
-    ) {
+    ) initializer public {
         __Ownable_init();
         __Pausable_init();
-        __ERC721A_init(_name, _symbol);
+        __ERC721A_init("CryptoSurfersNFT", "SURF");
         __PaymentSplitter_init_unchained(payees, shares_);
         transferOwnership(_owner);
 
-        erc20 = IERC20(_eRC20address);
+        usdt = IERC20(_usdtAddress);
         priceFeed = AggregatorV3Interface(_priceFeedAddress);
         salePrice = 0.1 ether;
         _baseTokenURI = baseURI_;
-        saleStatus = SaleStatus.NOT_STARTED;
+        saleStatus = Sale.Status.NOT_STARTED;
     }
 
     function mint(uint _quantity, bool payWithEther) external payable  {
-        require(saleStatus == SaleStatus.SALE, "CryptoSurfersNFT::mint: Sale hasn't started.");
+        require(saleStatus == Sale.Status.STARTED, "CryptoSurfersNFT::mint: Sale hasn't started.");
         require(_quantity > 0, "CryptoSurfersNFT::mint: Quantity cannot be zero.");
         require(_quantity <= MAX_SALE, "CryptoSurfersNFT::mint: Quantity cannot be bigger than MAX_BUYING.");
 
@@ -82,9 +82,9 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
             ethPrice = (ethPrice / 1000) * 995;
             require(msg.value >= ethPrice, "CryptoSurfersNFT::mint: Value sent is insufficient");
         } else {
-            require(erc20.balanceOf(msg.sender) >= salePprice * _quantity, "CryptoSurfersNFT::mint: USDT balance is insufficient");
-            require(erc20.allowance(msg.sender, address(this)) >= salePprice * _quantity, "CryptoSurfersNFT::mint: USDT allowance is insufficient");
-            erc20.transferFrom(msg.sender, address(this), salePprice * _quantity);
+            require(usdt.balanceOf(msg.sender) >= salePrice * _quantity, "CryptoSurfersNFT::mint: USDT balance is insufficient");
+            require(usdt.allowance(msg.sender, address(this)) >= salePrice * _quantity, "CryptoSurfersNFT::mint: USDT allowance is insufficient");
+            usdt.transferFrom(msg.sender, address(this), salePrice * _quantity);
         }
         
         _safeMint(msg.sender, _quantity);
@@ -126,37 +126,37 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
     }
 
     function startSale() external onlyOwner {
-        require(saleStatus == SaleStatus.NOT_STARTED || saleStatus == SaleStatus.SALE_PAUSED, "CrowdsaleStatus::startSale: Inconsistent status.");
-        saleStatus = SaleStatus.SALE;
+        require(saleStatus == Sale.Status.NOT_STARTED || saleStatus == Sale.Status.PAUSED, "CrowdsaleStatus::startSale: Inconsistent status.");
+        saleStatus = Sale.Status.STARTED;
     }
 
     function pauseSale() external onlyOwner {
-        require(saleStatus == SaleStatus.SALE, "CrowdsaleStatus::pauseSale: Sale is not active.");
-        saleStatus = SaleStatus.SALE_PAUSED;
+        require(saleStatus == Sale.Status.STARTED, "CrowdsaleStatus::pauseSale: Sale is not active.");
+        saleStatus = Sale.Status.PAUSED;
     }
 
     function endSale() external onlyOwner {
-        require(saleStatus == SaleStatus.SALE || saleStatus == SaleStatus.SALE_PAUSED, "CrowdsaleStatus::endSale: Sale is not started.");
-        saleStatus = SaleStatus.ENDED;
+        require(saleStatus == Sale.Status.STARTED || saleStatus == Sale.Status.PAUSED, "CrowdsaleStatus::endSale: Sale is not started.");
+        saleStatus = Sale.Status.ENDED;
     }
 
-    function pause() external onlyOperator {
+    function pause() external onlyOwner {
         _pause();
     }
 
-    function unpause() external onlyOperator {
+    function unpause() external onlyOwner {
         _unpause();
     }
 
-    function getSaleInformation(_userAddress) external view returns (Sale.Information) {
+    function getSaleInformation(address _userAddress) external view returns (Sale.Information memory) {
         return Sale.Information({
             ethBalance: _userAddress.balance,
-            erc20Balance: erc20.balanceOf(_userAddress),
-            erc20Allowance: erc20.allowance(_userAddress, address(this)),
+            USDTBalance: usdt.balanceOf(_userAddress),
+            USDTAllowance: usdt.allowance(_userAddress, address(this)),
             userMinted: balanceOf(_userAddress),
             totalMintedInCollection: totalSupply(),
             latestPriceInEth: getLatestPriceInEth(),
-            latestPriceInErc20: salePrice
+            latestPriceInUSDT: salePrice
         });
     }
 
