@@ -8,7 +8,11 @@ const maxPerSale = 300;
 const price = '1000000'; // price 1 USD
 const ethPriceThreshold = 0.5;
 const DNA = "A5376A211CA1AE1D";
+const DNA2 = "A5376A211CA1AE1e";
+const DNA3 = "A5376A211CA1AE1c";
 const encodedDNA = ethers.BigNumber.from(hexEncode(DNA));
+const encodedDNA2 = ethers.BigNumber.from(hexEncode(DNA2));
+const encodedDNA3 = ethers.BigNumber.from(hexEncode(DNA3));
 
 describe("Minting", function () {
 
@@ -131,7 +135,7 @@ describe("Minting", function () {
     ).to.rejectedWith("VM Exception while processing transaction: reverted with reason string 'CryptoSurfersNFT::mint: USDT allowance is insufficient'");
   });
 
-  it("should be able to Mint for someone else in public sale with ETH", async function () {
+  it("should be able to Mint for someone else in public sale with ETH using different dnas", async function () {
 
     // enables the sale
     let tx = await collection.enableSale();
@@ -139,16 +143,16 @@ describe("Minting", function () {
 
     const priceInEth = await collection.getLatestPriceInEth()
 
-    const mintQuantity = 1;
+    const mintQuantity = 3;
 
     // value = price times quantity
     const payValue = priceInEth.mul(mintQuantity)
 
-    tx = await collection.connect(user).mintTo(owner.address, mintQuantity, true, [encodedDNA], {value: priceInEth.toString()})
+    tx = await collection.connect(user).mintTo(owner.address, mintQuantity, true, [encodedDNA, encodedDNA2, encodedDNA3], {value: payValue.toString()})
     await tx.wait()
 
-    expect(await collection.balanceOf(owner.address)).to.equal(1);
-    expect(await collection.totalSupply()).to.equal(1);
+    expect(await collection.balanceOf(owner.address)).to.equal(3);
+    expect(await collection.totalSupply()).to.equal(3);
   });
 
   it("should not be able to Mint for someone else in public sale with ETH using the same DNA", async function () {
