@@ -39,8 +39,8 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
     PriceFeed public priceFeed;
 
     // @dev mapping for token URIs
-    mapping(uint => uint) private tokenToDNA;
-    mapping(uint => uint) private DNAToToken;
+    mapping(uint => uint) public tokenToDNA;
+    mapping(uint => uint) public DNAToToken;
 
     // @dev MAX per buying event
     uint public maxPerSale;

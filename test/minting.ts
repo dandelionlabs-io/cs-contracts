@@ -2,7 +2,7 @@ import { time, loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { deployCollection } from "./util/fixtures";
-import { hexEncode } from "./util/hex-encode";
+import { hexEncode, hexDecode } from "./util/hex-encode";
 
 const maxPerSale = 300;
 const price = '1000000'; // price 1 USD
@@ -153,6 +153,11 @@ describe("Minting", function () {
 
     expect(await collection.balanceOf(owner.address)).to.equal(3);
     expect(await collection.totalSupply()).to.equal(3);
+
+    const contractStoredDNA = await collection.tokenToDNA(0);
+    const bigNumberToEncodedDNA = contractStoredDNA.toString();
+    const decodedDNA = hexDecode('0x' + bigNumberToEncodedDNA);
+    expect(decodedDNA).to.equal(DNA);
   });
 
   it("should not be able to Mint for someone else in public sale with ETH using the same DNA", async function () {
