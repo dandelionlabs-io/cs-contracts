@@ -39,7 +39,8 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
     PriceFeed public priceFeed;
 
     // @dev mapping for token URIs
-    mapping(uint => string) private tokenURIs;
+    mapping(uint => uint) private tokenToDNA;
+    mapping(uint => uint) private DNAToToken;
 
     // @dev MAX per buying event
     uint public maxPerSale;
@@ -50,8 +51,12 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
     // @dev if sale is active enables minting function
     bool public saleEnabled;
 
+    // @dev base uri for the generation of the token uris
+    string public baseURI;
+
     function __CryptoSurfersNFT_initialize(
         address _owner,
+        string memory baseURI_,
         uint _salePrice,
         uint _maxPerSale,
         address _usdtAddress,
@@ -65,21 +70,22 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         __PaymentSplitter_init(payees, shares_);
         transferOwnership(_owner);
 
+        baseURI = baseURI_;
         salePrice = _salePrice;
         maxPerSale = _maxPerSale;
         usdt = IERC20(_usdtAddress);
         priceFeed = PriceFeed(_priceFeedAddress);
     }
 
-    function mintTo(address _to, uint _quantity, bool payWithEther) public payable {
-        _mint(_to, _quantity, payWithEther);
+    function mintTo(address _to, uint _quantity, bool payWithEther, uint[] memory _dna) public payable {
+        _mint(_to, _quantity, payWithEther, _dna);
     }
 
-    function mint(uint _quantity, bool payWithEther) public payable {
-        _mint(msg.sender, _quantity, payWithEther);
+    function mint(uint _quantity, bool payWithEther, uint[] memory _dna) public payable {
+        _mint(msg.sender, _quantity, payWithEther, _dna);
     }
 
-    function _mint(address _to, uint _quantity, bool payWithEther) public payable {
+    function _mint(address _to, uint _quantity, bool payWithEther, uint[] memory _dna) public payable {
         require(saleEnabled && !paused(), "CryptoSurfersNFT::mint: Sale is not active.");
         require(_quantity > 0, "CryptoSurfersNFT::mint: Quantity cannot be zero.");
         require(_quantity <= maxPerSale, "CryptoSurfersNFT::mint: Quantity cannot be bigger than maxPerSale.");
@@ -95,26 +101,41 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
             usdt.transferFrom(msg.sender, address(this), salePrice * _quantity);
         }
         
+        require(_quantity == _dna.length, "CryptoSurfersNFT::_mint: dna list shall have same amount as quantity.");
+        uint latestId = totalSupply();
         _safeMint(_to, _quantity);
+        for(uint i = 0; i < _quantity; i++) {
+            _setTokenDNA(latestId, _dna[i]);
+            latestId++;
+        }
     }
 
-    function mintByOwner(address _to, uint _quantity) public onlyOwner {
+    function mintByOwner(address _to, uint _quantity, uint[] memory _dna) public onlyOwner {
         require(_quantity > 0, "CryptoSurfersNFT::mintByOwner: Quantity cannot be zero.");
-        
+        require(_quantity == _dna.length, "CryptoSurfersNFT::mintByOwner: dna list shall have same amount as quantity.");
+        uint latestId = totalSupply();
         _safeMint(_to, _quantity);
+        for(uint i = 0; i < _quantity; i++) {
+            _setTokenDNA(latestId, _dna[i]);
+            latestId++;
+        }
     }
     
-    function batchMintByOwner(address[] memory _mintAddressList, uint[] memory _quantityList) external onlyOwner {
+    function batchMintByOwner(address[] memory _mintAddressList, uint[] memory _quantityList, uint[][] memory _dnaList) external onlyOwner {
         require (_mintAddressList.length == _quantityList.length, "CryptoSurfersNFT::batchMintByOwner: The length should be same");
 
         for (uint i = 0; i < _mintAddressList.length; i += 1) {
-            mintByOwner(_mintAddressList[i], _quantityList[i]);
+            mintByOwner(_mintAddressList[i], _quantityList[i], _dnaList[i]);
         }
     }
 
     function getLatestPriceInEth() public view returns (uint) {
         (,int price,,,) = priceFeed.latestRoundData();
         return (salePrice * 1e20) / uint(price);
+    }
+
+    function setBaseURI(string memory baseURI_) external onlyOwner {
+        baseURI = baseURI_;
     }
 
     function setSalePrice(uint _newPrice) external onlyOwner {
@@ -157,9 +178,9 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         });
     }
 
-    function tokenURI(uint tokenId) public view virtual override returns (string memory) {
-        require(_exists(tokenId), "CryptoSurfersNFT: NFT has not been minted");
-        return tokenURIs[tokenId];
+    function tokenURI(uint _tokenId) public view virtual override returns (string memory) {
+        require(_exists(_tokenId), "CryptoSurfersNFT: NFT has not been minted");
+        return string(abi.encodePacked(baseURI, tokenToDNA[_tokenId]));
     }
 
     /**
@@ -169,9 +190,11 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
      *
      * - `tokenId` must exist.
      */
-    function _setTokenURI(uint tokenId, string memory _tokenURI) internal virtual {
-        require(_exists(tokenId), "CryptoSurfersNFT: URI set of nonexistent token");
-        tokenURIs[tokenId] = _tokenURI;
+    function _setTokenDNA(uint _tokenId, uint _tokenDNA) internal virtual {
+        require(_tokenDNA > 0, "CryptoSurfersNFT::_setTokenDNA: token dna must be greater than 0.");
+        require(DNAToToken[_tokenDNA] == 0 && _tokenDNA != tokenToDNA[0], "CryptoSurfersNFT::_setTokenDNA: DNA has already been assigned.");
+        tokenToDNA[_tokenId] = _tokenDNA;
+        DNAToToken[_tokenDNA] = _tokenId;
     }
 
     /**

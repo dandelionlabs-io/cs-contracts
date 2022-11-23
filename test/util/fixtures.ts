@@ -21,8 +21,9 @@ async function deployCollection() {
   const collection = await upgrades.deployProxy(
     CryptoSurfersNFT, 
     [
-      owner.address,         // owner
-      "1000000", // sale price (1 USDT)
+      owner.address, // owner
+      'https://cryptosurfers.club/assets/',
+      "1000000",     // sale price (1 USDT)
       300,
       usdt.address,
       priceFeed.address,
