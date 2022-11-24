@@ -5,6 +5,7 @@ pragma solidity ^0.8.4;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/finance/PaymentSplitterUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
 import "erc721a-upgradeable/contracts/ERC721AUpgradeable.sol";
 
 interface IERC20 {
@@ -19,6 +20,7 @@ interface PriceFeed {
 }
 
 contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpgradeable, PaymentSplitterUpgradeable {
+    using StringsUpgradeable for uint256;
 
     struct SaleInformation {
         bool saleEnabled;             // if sale is active
@@ -85,7 +87,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         _mint(msg.sender, _quantity, payWithEther, _dna);
     }
 
-    function _mint(address _to, uint _quantity, bool payWithEther, uint[] memory _dna) public payable {
+    function _mint(address _to, uint _quantity, bool payWithEther, uint[] memory _dna) internal {
         require(saleEnabled && !paused(), "CryptoSurfersNFT::mint: Sale is not active.");
         require(_quantity > 0, "CryptoSurfersNFT::mint: Quantity cannot be zero.");
         require(_quantity <= maxPerSale, "CryptoSurfersNFT::mint: Quantity cannot be bigger than maxPerSale.");

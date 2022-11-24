@@ -3,16 +3,19 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { deployCollection } from "./util/fixtures";
 import { hexEncode, hexDecode } from "./util/hex-encode";
+import { uid } from 'uid';
 
 const maxPerSale = 300;
 const price = '1000000'; // price 1 USD
 const ethPriceThreshold = 0.5;
-const DNA = "A5376A211CA1AE1D";
-const DNA2 = "A5376A211CA1AE1e";
-const DNA3 = "A5376A211CA1AE1c";
+const DNA = uid(16).toString();
+const DNA2 = uid(16).toString()
+const DNA3 = uid(16).toString();
 const encodedDNA = ethers.BigNumber.from(hexEncode(DNA));
 const encodedDNA2 = ethers.BigNumber.from(hexEncode(DNA2));
 const encodedDNA3 = ethers.BigNumber.from(hexEncode(DNA3));
+
+console.log("encodedDNA.toString()", encodedDNA.toString())
 
 describe("Minting", function () {
 
