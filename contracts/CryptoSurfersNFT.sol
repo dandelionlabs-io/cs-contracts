@@ -4,9 +4,9 @@ pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/finance/PaymentSplitterUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
-import "erc721a-upgradeable/contracts/ERC721AUpgradeable.sol";
 
 interface IERC20 {
     function balanceOf(address account) external view returns (uint);
@@ -19,8 +19,7 @@ interface PriceFeed {
     returns (uint80 roundId, int256 answer, uint startedAt, uint updatedAt, uint80 answeredInRound);
 }
 
-contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpgradeable, PaymentSplitterUpgradeable {
-    using StringsUpgradeable for uint256;
+contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC721EnumerableUpgradeable, PausableUpgradeable, PaymentSplitterUpgradeable {
 
     struct SaleInformation {
         bool saleEnabled;             // if sale is active
@@ -39,10 +38,6 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
 
     // @dev USDT against ETH price feed
     PriceFeed public priceFeed;
-
-    // @dev mapping for token URIs
-    mapping(uint => uint) public tokenToDNA;
-    mapping(uint => uint) public DNAToToken;
 
     // @dev MAX per buying event
     uint public maxPerSale;
@@ -65,10 +60,11 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         address _priceFeedAddress,
         address[] memory payees,
         uint[] memory shares_
-    ) initializerERC721A initializer public {
+    ) initializer public {
         __Ownable_init();
         __Pausable_init();
-        __ERC721A_init("CryptoSurfersNFT", "SURF");
+        __ERC721_init("CryptoSurfersNFT", "SURF");
+        __ERC721Enumerable_init();
         __PaymentSplitter_init(payees, shares_);
         transferOwnership(_owner);
 
@@ -79,55 +75,46 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         priceFeed = PriceFeed(_priceFeedAddress);
     }
 
-    function mintTo(address _to, uint _quantity, bool payWithEther, uint[] memory _dna) public payable {
-        _mint(_to, _quantity, payWithEther, _dna);
+    function mintTo(address _to, uint[] memory _dna, bool payWithEther) public payable {
+        _mint(_to, _dna, payWithEther);
     }
 
-    function mint(uint _quantity, bool payWithEther, uint[] memory _dna) public payable {
-        _mint(msg.sender, _quantity, payWithEther, _dna);
+    function mint(uint[] memory _dna, bool payWithEther) public payable {
+        _mint(msg.sender, _dna, payWithEther);
     }
 
-    function _mint(address _to, uint _quantity, bool payWithEther, uint[] memory _dna) internal {
+    function _mint(address _to, uint[] memory _dna, bool payWithEther) internal {
         require(saleEnabled && !paused(), "CryptoSurfersNFT::mint: Sale is not active.");
-        require(_quantity > 0, "CryptoSurfersNFT::mint: Quantity cannot be zero.");
-        require(_quantity <= maxPerSale, "CryptoSurfersNFT::mint: Quantity cannot be bigger than maxPerSale.");
+        require(_dna.length > 0, "CryptoSurfersNFT::mint: Quantity cannot be zero.");
+        require(_dna.length <= maxPerSale, "CryptoSurfersNFT::mint: Quantity cannot be bigger than maxPerSale.");
 
         if (payWithEther) {
-            uint ethPrice = getLatestPriceInEth() * _quantity;
+            uint ethPrice = getLatestPriceInEth() * _dna.length;
             // deviation threshold 0.5%
             ethPrice = (ethPrice / 1000) * 995;
             require(msg.value >= ethPrice, "CryptoSurfersNFT::mint: Value sent is insufficient");
         } else {
-            require(usdt.balanceOf(msg.sender) >= salePrice * _quantity, "CryptoSurfersNFT::mint: USDT balance is insufficient");
-            require(usdt.allowance(msg.sender, address(this)) >= salePrice * _quantity, "CryptoSurfersNFT::mint: USDT allowance is insufficient");
-            usdt.transferFrom(msg.sender, address(this), salePrice * _quantity);
+            require(usdt.balanceOf(msg.sender) >= salePrice * _dna.length, "CryptoSurfersNFT::mint: USDT balance is insufficient");
+            require(usdt.allowance(msg.sender, address(this)) >= salePrice * _dna.length, "CryptoSurfersNFT::mint: USDT allowance is insufficient");
+            usdt.transferFrom(msg.sender, address(this), salePrice * _dna.length);
         }
-        
-        require(_quantity == _dna.length, "CryptoSurfersNFT::_mint: dna list shall have same amount as quantity.");
-        uint latestId = totalSupply();
-        _safeMint(_to, _quantity);
-        for(uint i = 0; i < _quantity; i++) {
-            _setTokenDNA(latestId, _dna[i]);
-            latestId++;
+        for (uint i = 0; i < _dna.length; i++) {
+            _safeMint(_to, _dna[i]);
         }
     }
 
-    function mintByOwner(address _to, uint _quantity, uint[] memory _dna) public onlyOwner {
-        require(_quantity > 0, "CryptoSurfersNFT::mintByOwner: Quantity cannot be zero.");
-        require(_quantity == _dna.length, "CryptoSurfersNFT::mintByOwner: dna list shall have same amount as quantity.");
-        uint latestId = totalSupply();
-        _safeMint(_to, _quantity);
-        for(uint i = 0; i < _quantity; i++) {
-            _setTokenDNA(latestId, _dna[i]);
-            latestId++;
+    function mintByOwner(address _to, uint[] memory _dna) public onlyOwner {
+        require(_dna.length > 0, "CryptoSurfersNFT::mintByOwner: Quantity cannot be zero.");
+        for (uint i = 0; i < _dna.length; i++) {
+            _safeMint(_to, _dna[i]);
         }
     }
     
-    function batchMintByOwner(address[] memory _mintAddressList, uint[] memory _quantityList, uint[][] memory _dnaList) external onlyOwner {
-        require (_mintAddressList.length == _quantityList.length, "CryptoSurfersNFT::batchMintByOwner: The length should be same");
+    function batchMintByOwner(address[] memory _mintAddressList, uint[][] memory _dnaList) external onlyOwner {
+        require (_mintAddressList.length == _dnaList.length, "CryptoSurfersNFT::batchMintByOwner: The length should be same");
 
         for (uint i = 0; i < _mintAddressList.length; i += 1) {
-            mintByOwner(_mintAddressList[i], _quantityList[i], _dnaList[i]);
+            mintByOwner(_mintAddressList[i], _dnaList[i]);
         }
     }
 
@@ -149,12 +136,12 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
     }
 
     function enableSale() external onlyOwner {
-        require(!saleEnabled, "CrowdsaleStatus::startSale: Inconsistent status.");
+        require(!saleEnabled, "CryptoSurfersNFT::startSale: Inconsistent status.");
         saleEnabled = true;
     }
 
     function disableSale() external onlyOwner {
-        require(saleEnabled, "CrowdsaleStatus::pauseSale: Sale is not active.");
+        require(saleEnabled, "CryptoSurfersNFT::pauseSale: Sale is not active.");
         saleEnabled = false;
     }
 
@@ -169,10 +156,10 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
     function getSaleInformation(address _userAddress) external view returns (SaleInformation memory) {
         return SaleInformation({
             saleEnabled: saleEnabled && !paused(),
-            ethBalance: _userAddress.balance,
-            USDTBalance: usdt.balanceOf(_userAddress),
-            USDTAllowance: usdt.allowance(_userAddress, address(this)),
-            userMinted: balanceOf(_userAddress),
+            ethBalance: _userAddress == address (0) ? 0 : _userAddress.balance,
+            USDTBalance: _userAddress == address (0) ? 0 : usdt.balanceOf(_userAddress),
+            USDTAllowance: _userAddress == address (0) ? 0 : usdt.allowance(_userAddress, address(this)),
+            userMinted: _userAddress == address (0) ? 0 : balanceOf(_userAddress),
             totalMintedInCollection: totalSupply(),
             maxPerSale: maxPerSale,
             latestPriceInEth: getLatestPriceInEth(),
@@ -180,23 +167,9 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
         });
     }
 
-    function tokenURI(uint _tokenId) public view virtual override returns (string memory) {
+    function tokenURI(uint _tokenId) public view virtual override(IERC721MetadataUpgradeable, ERC721Upgradeable) returns (string memory) {
         require(_exists(_tokenId), "CryptoSurfersNFT: NFT has not been minted");
-        return string(abi.encodePacked(baseURI, tokenToDNA[_tokenId]));
-    }
-
-    /**
-     * @dev Sets `_tokenURI` as the tokenURI of `tokenId`.
-     *
-     * Requirements:
-     *
-     * - `tokenId` must exist.
-     */
-    function _setTokenDNA(uint _tokenId, uint _tokenDNA) internal virtual {
-        require(_tokenDNA > 0, "CryptoSurfersNFT::_setTokenDNA: token dna must be greater than 0.");
-        require(DNAToToken[_tokenDNA] == 0 && _tokenDNA != tokenToDNA[0], "CryptoSurfersNFT::_setTokenDNA: DNA has already been assigned.");
-        tokenToDNA[_tokenId] = _tokenDNA;
-        DNAToToken[_tokenDNA] = _tokenId;
+        return string(abi.encodePacked(baseURI, StringsUpgradeable.toString(_tokenId)));
     }
 
     /**
@@ -206,14 +179,14 @@ contract CryptoSurfersNFT is OwnableUpgradeable, ERC721AUpgradeable, PausableUpg
      *
      * - the contract must not be paused.
      */
-    function _beforeTokenTransfers(
+    function _beforeTokenTransfer(
         address from,
         address to,
         uint startTokenId,
         uint quantity
     ) internal virtual override {
-        super._beforeTokenTransfers(from, to, startTokenId, quantity);
         require(!paused(), "CryptoSurfersNFT::_beforeTokenTransfers: token transfer while paused.");
+        super._beforeTokenTransfer(from, to, startTokenId, quantity);
     }
 
     uint[50] private __gap;
