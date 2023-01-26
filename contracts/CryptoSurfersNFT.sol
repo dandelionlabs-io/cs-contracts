@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/finance/PaymentSplitterUpgradeable.s
 import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/interfaces/IERC2981Upgradeable.sol";
 
 interface IERC20 {
     function balanceOf(address account) external view returns (uint);
@@ -18,7 +19,7 @@ interface PriceFeed {
     returns (uint80 roundId, int256 answer, uint startedAt, uint updatedAt, uint80 answeredInRound);
 }
 
-contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC721EnumerableUpgradeable, PausableUpgradeable, PaymentSplitterUpgradeable {
+contract CryptoSurfersNFT is OwnableUpgradeable, IERC2981Upgradeable, IERC721MetadataUpgradeable, ERC721EnumerableUpgradeable, PausableUpgradeable, PaymentSplitterUpgradeable {
 
     struct SaleInformation {
         bool saleEnabled;             // if sale is active
@@ -31,6 +32,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
         uint mintLimit;               // mint limit in the collection
         uint latestPriceInEth;        // price of NFT in eth
         uint latestPriceInUSDT;       // price of NFT in usdt
+        bool isOperator;              // if user is operator
     }
 
     // @dev USDT address
@@ -42,9 +44,6 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
     // @dev MAX per buying event
     uint public maxPerSale;
 
-    // @dev MAX mintable in collection
-    uint public mintLimit;
-
     // @dev defines sale price in USDT (6 decimals)
     uint public salePrice;
 
@@ -54,8 +53,14 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
     // @dev base uri for the generation of the token uris
     string public baseURI;
 
+    // @dev MAX mintable in collection
+    uint public mintLimit;
+
     // @dev Mapping for valid operators
     mapping(address => bool) private operators;
+
+    // @dev to set on chain royalties definition
+    uint96 internal feeNumerator;
 
     /**
      * @dev Throws if called by any account other than operator.
@@ -74,6 +79,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
         uint _mintLimit,
         address _usdtAddress,
         address _priceFeedAddress,
+        uint96 _feeNumerator,
         address[] memory payees,
         uint[] memory shares_
     ) initializer public {
@@ -90,6 +96,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
         mintLimit = _mintLimit;
         usdt = IERC20(_usdtAddress);
         priceFeed = PriceFeed(_priceFeedAddress);
+        feeNumerator = _feeNumerator;
 
         changeOperator(_owner, true);
 
@@ -164,6 +171,10 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
         usdt = IERC20(_usdtAddress);
     }
 
+    function setFeeNumerator(uint96 _feeNumerator) external onlyOwner {
+        feeNumerator = _feeNumerator;
+    }
+
     function changeOperator(address _operator, bool _status) public onlyOwner {
         operators[_operator] = _status;
     }
@@ -201,13 +212,20 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
             maxPerSale: maxPerSale,
             mintLimit: mintLimit,
             latestPriceInEth: getLatestPriceInEth(),
-            latestPriceInUSDT: salePrice
+            latestPriceInUSDT: salePrice,
+            isOperator: _userAddress == address (0) ? false : isOperator(_userAddress)
         });
     }
 
     function tokenURI(uint _tokenId) public view virtual override(IERC721MetadataUpgradeable, ERC721Upgradeable) returns (string memory) {
-        require(_exists(_tokenId), "CryptoSurfersNFT: NFT has not been minted");
+        require(_exists(_tokenId), "CryptoSurfersNFT::tokenURI: NFT has not been minted");
         return string(abi.encodePacked(baseURI, StringsUpgradeable.toString(_tokenId)));
+    }
+
+    function royaltyInfo(uint _tokenId, uint _salePrice) external view virtual override returns (address, uint) {
+        require(_exists(_tokenId), "CryptoSurfersNFT::royaltyInfo: NFT has not been minted.");
+        uint royaltyAmount = (_salePrice * feeNumerator) / 10000;
+        return (owner(), royaltyAmount);
     }
 
     /**
@@ -227,5 +245,5 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
         super._beforeTokenTransfer(from, to, startTokenId, quantity);
     }
 
-    uint[50] private __gap;
+    uint[47] private __gap;
 }

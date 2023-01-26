@@ -27,6 +27,7 @@ async function deployCollection() {
             mintLimit,
             usdt.address,
             priceFeed.address,
+            1000, // 10%
             [owner.address, user.address],
             [5000, 5000]
         ],
