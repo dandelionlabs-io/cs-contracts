@@ -14,3 +14,7 @@ artifacts
 
 # mac
 .DS_Store
+
+.idea
+
+remix-compiler.config.js

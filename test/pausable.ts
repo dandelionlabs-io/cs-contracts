@@ -1,4 +1,4 @@
-import { time, loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { deployCollection } from "./util/fixtures";
 
@@ -9,13 +9,13 @@ describe("Pausable", function () {
   });
 
 
-  it("Onwer can pause the contract", async function () {
+  it("Owner can pause the contract", async function () {
     const tx = await collection.pause()
     await tx.wait();
     expect(await collection.paused()).to.equal(true);
   });
 
-  it("Non-owner can't pause the contract", async function () {    
+  it("Non-owner can't pause the contract", async function () {
     await expect(
       collection.connect(user).pause()
     ).to.be.rejectedWith(

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -29,6 +28,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
         uint userMinted;              // minted by the user
         uint totalMintedInCollection; // total minted in the collection
         uint maxPerSale;              // max items to buy per tx
+        uint mintLimit;               // mint limit in the collection
         uint latestPriceInEth;        // price of NFT in eth
         uint latestPriceInUSDT;       // price of NFT in usdt
     }
@@ -42,6 +42,9 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
     // @dev MAX per buying event
     uint public maxPerSale;
 
+    // @dev MAX mintable in collection
+    uint public mintLimit;
+
     // @dev defines sale price in USDT (6 decimals)
     uint public salePrice;
 
@@ -51,11 +54,24 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
     // @dev base uri for the generation of the token uris
     string public baseURI;
 
+    // @dev Mapping for valid operators
+    mapping(address => bool) private operators;
+
+    /**
+     * @dev Throws if called by any account other than operator.
+     */
+    modifier onlyOperator() {
+        require(isOperator(_msgSender()), "CryptoSurfersNFT::onlyOperator: caller is not an operator.");
+        _;
+    }
+
     function __CryptoSurfersNFT_initialize(
         address _owner,
+        address[] memory _operators,
         string memory baseURI_,
         uint _salePrice,
         uint _maxPerSale,
+        uint _mintLimit,
         address _usdtAddress,
         address _priceFeedAddress,
         address[] memory payees,
@@ -71,8 +87,15 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
         baseURI = baseURI_;
         salePrice = _salePrice;
         maxPerSale = _maxPerSale;
+        mintLimit = _mintLimit;
         usdt = IERC20(_usdtAddress);
         priceFeed = PriceFeed(_priceFeedAddress);
+
+        changeOperator(_owner, true);
+
+        for (uint i = 0; i < _operators.length; i++) {
+            changeOperator(_operators[i], true);
+        }
     }
 
     function mintTo(address _to, uint[] memory _dna, bool payWithEther) public payable {
@@ -87,6 +110,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
         require(saleEnabled && !paused(), "CryptoSurfersNFT::mint: Sale is not active.");
         require(_dna.length > 0, "CryptoSurfersNFT::mint: Quantity cannot be zero.");
         require(_dna.length <= maxPerSale, "CryptoSurfersNFT::mint: Quantity cannot be bigger than maxPerSale.");
+        require(totalSupply() + _dna.length <= mintLimit, "CryptoSurfersNFT::mint: Cannot surpass the collection minting limit.");
 
         if (payWithEther) {
             uint ethPrice = getLatestPriceInEth() * _dna.length;
@@ -103,18 +127,19 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
         }
     }
 
-    function mintByOwner(address _to, uint[] memory _dna) public onlyOwner {
-        require(_dna.length > 0, "CryptoSurfersNFT::mintByOwner: Quantity cannot be zero.");
+    function mintByOperator(address _to, uint[] memory _dna) public onlyOperator {
+        require(_dna.length > 0, "CryptoSurfersNFT::mintByOperator: Quantity cannot be zero.");
+        require(totalSupply() + _dna.length <= mintLimit, "CryptoSurfersNFT::mintByOperator: Cannot surpass the collection minting limit.");
         for (uint i = 0; i < _dna.length; i++) {
             _safeMint(_to, _dna[i]);
         }
     }
-    
-    function batchMintByOwner(address[] memory _mintAddressList, uint[][] memory _dnaList) external onlyOwner {
-        require (_mintAddressList.length == _dnaList.length, "CryptoSurfersNFT::batchMintByOwner: The length should be same");
+
+    function batchMintByOperator(address[] memory _mintAddressList, uint[][] memory _dnaList) external onlyOperator {
+        require (_mintAddressList.length == _dnaList.length, "CryptoSurfersNFT::batchMintByOperator: The length should be same");
 
         for (uint i = 0; i < _mintAddressList.length; i += 1) {
-            mintByOwner(_mintAddressList[i], _dnaList[i]);
+            mintByOperator(_mintAddressList[i], _dnaList[i]);
         }
     }
 
@@ -131,8 +156,20 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
         salePrice = _newPrice;
     }
 
-    function setSaleMax(uint _maxPerSale) external onlyOwner {
+    function setMaxPerSale(uint _maxPerSale) external onlyOwner {
         maxPerSale = _maxPerSale;
+    }
+
+    function setUsdtContract(address _usdtAddress) external onlyOwner {
+        usdt = IERC20(_usdtAddress);
+    }
+
+    function changeOperator(address _operator, bool _status) public onlyOwner {
+        operators[_operator] = _status;
+    }
+
+    function isOperator(address _account) public view returns (bool) {
+        return operators[_account];
     }
 
     function enableSale() external onlyOwner {
@@ -162,6 +199,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC721MetadataUpgradeable, ERC
             userMinted: _userAddress == address (0) ? 0 : balanceOf(_userAddress),
             totalMintedInCollection: totalSupply(),
             maxPerSale: maxPerSale,
+            mintLimit: mintLimit,
             latestPriceInEth: getLatestPriceInEth(),
             latestPriceInUSDT: salePrice
         });

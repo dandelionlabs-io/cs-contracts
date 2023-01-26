@@ -1,7 +1,7 @@
 {
   "name": "crypto-surfers-contracts",
   "version": "1.0.0",
-  "description": "Crypto Surfer smart contracts",
+  "description": "CryptoSurfers smart contracts",
   "main": "scripts/deploy.ts",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^2.0.0",
@@ -46,7 +46,6 @@
     "hardhat-gas-reporter": "^1.0.9",
     "keccak256": "^1.0.6",
     "solidity-coverage": "^0.8.2",
-    "typechain": "^8.1.1",
-    "uid": "^2.0.1"
+    "typechain": "^8.1.1"
   }
 }
