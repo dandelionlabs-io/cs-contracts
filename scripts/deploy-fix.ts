@@ -8,7 +8,6 @@ const communityAddress = "0x2cDDc52B3c63FdC6B165a0E17Fe91FE2DaCC5912";
 async function main() {
 
     const CryptoSurfersNFT = await ethers.getContractFactory("CryptoSurfersNFT");
-    const cryptoSurfersNFT = CryptoSurfersNFT
 
     const collection = await upgrades.deployProxy(
         CryptoSurfersNFT,
@@ -25,7 +24,7 @@ async function main() {
             [communityAddress],
             [5000]
         ],
-        {initializer: '__CryptoSurfersNFT_initialize'}
+        {initializer: '__CryptoSurfersNFT_initialize', useDeployedImplementation: true}
     );
 
     await collection.deployed()

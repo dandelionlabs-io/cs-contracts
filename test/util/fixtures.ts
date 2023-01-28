@@ -28,8 +28,7 @@ async function deployCollection() {
             usdt.address,
             priceFeed.address,
             1000, // 10%
-            [owner.address, user.address],
-            [5000, 5000]
+            owner.address,
         ],
         {initializer: '__CryptoSurfersNFT_initialize'}
     );

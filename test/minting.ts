@@ -78,20 +78,7 @@ describe("Minting", function () {
 
     it("Should not mint if sale is not enabled", async function () {
       await expect(
-        collection.mint([dna1], true)
-      ).to.rejectedWith("VM Exception while processing transaction: reverted with reason string 'CryptoSurfersNFT::mint: Sale is not active.'");
-    });
-
-    it("Should not mint if sale enabled by contract is paused", async function () {
-      // enables the sale
-      let tx = await collection.enableSale();
-      await tx.wait();
-
-      await collection.pause();
-      await tx.wait();
-
-      await expect(
-        collection.connect(owner).mint([dna1], true)
+        collection.mintTo(user.address, [dna1], true)
       ).to.rejectedWith("VM Exception while processing transaction: reverted with reason string 'CryptoSurfersNFT::mint: Sale is not active.'");
     });
 
@@ -102,7 +89,7 @@ describe("Minting", function () {
       await tx.wait();
 
       await expect(
-        collection.mint([], true)
+        collection.mintTo(user.address, [], true)
       ).to.rejectedWith("VM Exception while processing transaction: reverted with reason string 'CryptoSurfersNFT::mint: Quantity cannot be zero.");
     });
 
@@ -113,7 +100,7 @@ describe("Minting", function () {
       await tx.wait();
 
       await expect(
-        collection.connect(owner).mint([dna1], true)
+        collection.connect(owner).mintTo(user.address, [dna1], true)
       ).to.rejectedWith("CryptoSurfersNFT::mint: Value sent is insufficient");
     });
 
@@ -137,7 +124,7 @@ describe("Minting", function () {
       const payValue = priceInEth.mul(greaterQuantity)
 
       await expect(
-        collection.connect(user).mint(dnaList, true, {value: payValue.toString()})
+        collection.connect(user).mintTo(user.address, dnaList, true, {value: payValue.toString()})
       ).to.rejectedWith("VM Exception while processing transaction: reverted with reason string 'CryptoSurfersNFT::mint: Quantity cannot be bigger than maxPerSale.'");
     });
 
@@ -149,7 +136,7 @@ describe("Minting", function () {
 
       const priceInEth = await collection.getLatestPriceInEth()
 
-      tx = await collection.connect(user).mint([dna1], true, {value: priceInEth.toString()})
+      tx = await collection.connect(user).mintTo(user.address, [dna1], true, {value: priceInEth.toString()})
       await tx.wait()
 
       expect(await collection.balanceOf(user.address)).to.equal(1);
@@ -169,7 +156,7 @@ describe("Minting", function () {
       tx = await usdt.connect(user).approve(collection.address, price);
       await tx.wait();
 
-      tx = await collection.connect(user).mint([dna1], false);
+      tx = await collection.connect(user).mintTo(user.address, [dna1], false);
       await tx.wait()
 
       expect(await collection.balanceOf(user.address)).to.equal(1);
@@ -186,7 +173,7 @@ describe("Minting", function () {
       await tx.wait();
 
       await expect(
-        collection.connect(user).mint([dna1], false)
+        collection.connect(user).mintTo(user.address, [dna1], false)
       ).to.rejectedWith("VM Exception while processing transaction: reverted with reason string 'CryptoSurfersNFT::mint: USDT allowance is insufficient'");
     });
 
@@ -228,7 +215,7 @@ describe("Minting", function () {
       const payValue = priceInEth.mul(mintQuantity)
 
       await expect(
-        collection.connect(user).mint([dna1], true, {value: payValue.toString()})
+        collection.connect(user).mintTo(user.address, [dna1], true, {value: payValue.toString()})
       ).to.rejectedWith("VM Exception while processing transaction: reverted with reason string 'ERC721: token already minted'");
     });
   });

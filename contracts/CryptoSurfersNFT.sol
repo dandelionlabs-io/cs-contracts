@@ -2,10 +2,8 @@
 pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/finance/PaymentSplitterUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/interfaces/IERC2981Upgradeable.sol";
 
 interface IERC20 {
@@ -19,7 +17,7 @@ interface PriceFeed {
     returns (uint80 roundId, int256 answer, uint startedAt, uint updatedAt, uint80 answeredInRound);
 }
 
-contract CryptoSurfersNFT is OwnableUpgradeable, IERC2981Upgradeable, IERC721MetadataUpgradeable, ERC721EnumerableUpgradeable, PausableUpgradeable, PaymentSplitterUpgradeable {
+contract CryptoSurfersNFT is OwnableUpgradeable, IERC2981Upgradeable, ERC721Upgradeable {
 
     struct SaleInformation {
         bool saleEnabled;             // if sale is active
@@ -62,6 +60,12 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC2981Upgradeable, IERC721Met
     // @dev to set on chain royalties definition
     uint96 internal feeNumerator;
 
+    // @dev to set the treasury address
+    address public treasuryAddress;
+
+    // @dev totalMinted
+    uint public totalSupply;
+
     /**
      * @dev Throws if called by any account other than operator.
      */
@@ -80,14 +84,10 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC2981Upgradeable, IERC721Met
         address _usdtAddress,
         address _priceFeedAddress,
         uint96 _feeNumerator,
-        address[] memory payees,
-        uint[] memory shares_
+        address _treasuryAddress
     ) initializer public {
         __Ownable_init();
-        __Pausable_init();
         __ERC721_init("CryptoSurfersNFT", "SURF");
-        __ERC721Enumerable_init();
-        __PaymentSplitter_init(payees, shares_);
         transferOwnership(_owner);
 
         baseURI = baseURI_;
@@ -97,6 +97,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC2981Upgradeable, IERC721Met
         usdt = IERC20(_usdtAddress);
         priceFeed = PriceFeed(_priceFeedAddress);
         feeNumerator = _feeNumerator;
+        treasuryAddress = _treasuryAddress;
 
         changeOperator(_owner, true);
 
@@ -105,19 +106,13 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC2981Upgradeable, IERC721Met
         }
     }
 
-    function mintTo(address _to, uint[] memory _dna, bool payWithEther) public payable {
-        _mint(_to, _dna, payWithEther);
+    function mintTo(address _to, uint[] memory _dna, bool payWithEther) external payable {
+        _payAndMint(_to, _dna, payWithEther);
     }
 
-    function mint(uint[] memory _dna, bool payWithEther) public payable {
-        _mint(msg.sender, _dna, payWithEther);
-    }
-
-    function _mint(address _to, uint[] memory _dna, bool payWithEther) internal {
-        require(saleEnabled && !paused(), "CryptoSurfersNFT::mint: Sale is not active.");
-        require(_dna.length > 0, "CryptoSurfersNFT::mint: Quantity cannot be zero.");
+    function _payAndMint(address _to, uint[] memory _dna, bool payWithEther) internal {
+        require(saleEnabled, "CryptoSurfersNFT::mint: Sale is not active.");
         require(_dna.length <= maxPerSale, "CryptoSurfersNFT::mint: Quantity cannot be bigger than maxPerSale.");
-        require(totalSupply() + _dna.length <= mintLimit, "CryptoSurfersNFT::mint: Cannot surpass the collection minting limit.");
 
         if (payWithEther) {
             uint ethPrice = getLatestPriceInEth() * _dna.length;
@@ -129,25 +124,28 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC2981Upgradeable, IERC721Met
             require(usdt.allowance(msg.sender, address(this)) >= salePrice * _dna.length, "CryptoSurfersNFT::mint: USDT allowance is insufficient");
             usdt.transferFrom(msg.sender, address(this), salePrice * _dna.length);
         }
-        for (uint i = 0; i < _dna.length; i++) {
-            _safeMint(_to, _dna[i]);
-        }
+        _mint(_to, _dna);
     }
 
-    function mintByOperator(address _to, uint[] memory _dna) public onlyOperator {
-        require(_dna.length > 0, "CryptoSurfersNFT::mintByOperator: Quantity cannot be zero.");
-        require(totalSupply() + _dna.length <= mintLimit, "CryptoSurfersNFT::mintByOperator: Cannot surpass the collection minting limit.");
-        for (uint i = 0; i < _dna.length; i++) {
-            _safeMint(_to, _dna[i]);
-        }
+    function mintByOperator(address _to, uint[] memory _dna) external onlyOperator {
+        _mint(_to, _dna);
     }
 
     function batchMintByOperator(address[] memory _mintAddressList, uint[][] memory _dnaList) external onlyOperator {
         require (_mintAddressList.length == _dnaList.length, "CryptoSurfersNFT::batchMintByOperator: The length should be same");
 
         for (uint i = 0; i < _mintAddressList.length; i += 1) {
-            mintByOperator(_mintAddressList[i], _dnaList[i]);
+            _mint(_mintAddressList[i], _dnaList[i]);
         }
+    }
+
+    function _mint(address _to, uint[] memory _dna) internal {
+        require(_dna.length > 0, "CryptoSurfersNFT::mint: Quantity cannot be zero.");
+        require(totalSupply + _dna.length <= mintLimit, "CryptoSurfersNFT::mintByOperator: Cannot surpass the collection minting limit.");
+        for (uint i = 0; i < _dna.length; i++) {
+            _safeMint(_to, _dna[i]);
+        }
+        totalSupply += _dna.length;
     }
 
     function getLatestPriceInEth() public view returns (uint) {
@@ -193,22 +191,14 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC2981Upgradeable, IERC721Met
         saleEnabled = false;
     }
 
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
     function getSaleInformation(address _userAddress) external view returns (SaleInformation memory) {
         return SaleInformation({
-            saleEnabled: saleEnabled && !paused(),
+            saleEnabled: saleEnabled,
             ethBalance: _userAddress == address (0) ? 0 : _userAddress.balance,
             USDTBalance: _userAddress == address (0) ? 0 : usdt.balanceOf(_userAddress),
             USDTAllowance: _userAddress == address (0) ? 0 : usdt.allowance(_userAddress, address(this)),
             userMinted: _userAddress == address (0) ? 0 : balanceOf(_userAddress),
-            totalMintedInCollection: totalSupply(),
+            totalMintedInCollection: totalSupply,
             maxPerSale: maxPerSale,
             mintLimit: mintLimit,
             latestPriceInEth: getLatestPriceInEth(),
@@ -217,7 +207,7 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC2981Upgradeable, IERC721Met
         });
     }
 
-    function tokenURI(uint _tokenId) public view virtual override(IERC721MetadataUpgradeable, ERC721Upgradeable) returns (string memory) {
+    function tokenURI(uint _tokenId) public view virtual override returns (string memory) {
         require(_exists(_tokenId), "CryptoSurfersNFT::tokenURI: NFT has not been minted");
         return string(abi.encodePacked(baseURI, StringsUpgradeable.toString(_tokenId)));
     }
@@ -228,22 +218,27 @@ contract CryptoSurfersNFT is OwnableUpgradeable, IERC2981Upgradeable, IERC721Met
         return (owner(), royaltyAmount);
     }
 
-    /**
-     * @dev See {ERC721AUpgradeable-_beforeTokenTransfers}.
-     *
-     * Requirements:
-     *
-     * - the contract must not be paused.
-     */
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint startTokenId,
-        uint quantity
-    ) internal virtual override {
-        require(!paused(), "CryptoSurfersNFT::_beforeTokenTransfers: token transfer while paused.");
-        super._beforeTokenTransfer(from, to, startTokenId, quantity);
+    function withdrawErc20(address tokenAddress) external onlyOwner {
+        IERC20 token = IERC20(tokenAddress);
+        uint256 totalBalance = token.balanceOf(address(this));
+
+        require(
+            token.transferFrom(address(this), treasuryAddress, totalBalance),
+            "Withdraw Failed To Treasury Wallet."
+        );
     }
 
-    uint[47] private __gap;
+    function withdrawEth() external onlyOwner {
+        uint256 totalBalance = address(this).balance;
+
+        (bool withdrawTreasuryAddress, ) = treasuryAddress.call{
+        value: totalBalance
+        }("");
+        require(
+            withdrawTreasuryAddress,
+            "Withdraw Failed To Treasury Wallet."
+        );
+    }
+
+    uint[49] private __gap;
 }
